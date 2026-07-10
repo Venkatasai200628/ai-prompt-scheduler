@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - ENCRYPTION_SECRET=${ENCRYPTION_SECRET}
+      - PORT=3000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+# Data is stored in ./data/scheduler.db on your machine
+# Run: ENCRYPTION_SECRET=your_secret docker-compose up -d

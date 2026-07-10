@@ -8,137 +8,197 @@
 <body>
 <div class="app">
 
+  <!-- Header -->
   <header class="header">
     <div class="header-icon">⏰</div>
-    <div class="header-text">
-      <h1 class="header-title">AI Prompt Scheduler</h1>
-      <p class="header-sub">Send prompts while you sleep</p>
+    <div>
+      <div class="header-title">AI Prompt Scheduler</div>
+      <div class="header-sub">Send prompts while you sleep</div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+      <button class="dark-toggle" id="darkToggle">🌙</button>
     </div>
   </header>
 
+  <!-- Settings panel (hidden by default) -->
+  <div class="settings-panel hidden" id="settingsPanel">
+    <div class="settings-title">⚙️ Settings</div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Dark Mode</div>
+        <div class="settings-sub">Switch between light and dark</div>
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="darkToggleSwitch">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-section-title">📱 Phone Mode</div>
+    <div class="settings-info">
+      Use <strong>Kiwi Browser</strong> on Android — it supports Chrome extensions. Install this same extension in Kiwi Browser and it works identically on your phone. No app needed.
+      <br><br>
+      <a href="https://play.google.com/store/apps/details?id=com.kiwibrowser.browser" target="_blank" class="settings-link">→ Get Kiwi Browser on Play Store</a>
+    </div>
+    <div class="settings-divider"></div>
+    <div class="settings-section-title">🗑️ Data Management</div>
+    <div class="settings-info">All your data is stored only in this browser. Nothing is sent anywhere in Local mode.</div>
+    <button class="btn-danger" id="clearDataBtn">🗑️ Clear All Scheduled Prompts</button>
+    <div id="clearStatus" class="status-msg hidden" style="margin-top:6px"></div>
+  </div>
+
   <!-- Mode Tabs -->
   <div class="mode-tabs">
-    <button class="mode-tab active" data-mode="local">💻<br><span>Local</span></button>
-    <button class="mode-tab" data-mode="cloud">☁️<br><span>Cloud</span></button>
-    <button class="mode-tab" data-mode="phone">📱<br><span>Phone</span></button>
+    <button class="mode-tab active" data-mode="local">💻 Local</button>
+    <button class="mode-tab" data-mode="cloud">☁️ Cloud</button>
+    <button class="mode-tab" data-mode="phone">📱 Phone</button>
   </div>
-  <div class="mode-desc" id="modeDesc">Fires from Chrome. Laptop must be on. No account needed.</div>
+  <div class="mode-desc" id="modeDesc">Fires from Chrome when laptop is on — or immediately when you next open Chrome if missed.</div>
 
-  <!-- ── LOCAL MODE ─────────────────────────────────────────────── -->
-  <div id="panel-local">
-    <section class="card" id="scheduleForm">
-      <h2 class="section-title">Schedule a Prompt</h2>
+  <!-- ── LOCAL PANEL ── -->
+  <div class="panel" id="panel-local">
+    <div class="card">
+      <div class="card-title">⏰  Schedule a Prompt</div>
+      <div id="l-editBanner" class="hint-box hidden" style="margin-bottom:9px">✏️ Editing an existing scheduled prompt</div>
+
       <div class="field">
         <label class="label">Platform</label>
-        <select id="local-platform" class="select">
+        <select id="l-platform" class="input">
           <option value="Claude.ai">🟠 Claude.ai</option>
           <option value="ChatGPT">🟢 ChatGPT</option>
           <option value="Gemini">🔵 Gemini</option>
           <option value="Perplexity">🟣 Perplexity</option>
         </select>
       </div>
+
       <div class="field">
-        <label class="label">Specific Chat URL <span class="hint">— continues exact conversation</span></label>
+        <label class="label">Chat URL <span class="hint">— continues exact conversation</span></label>
         <div class="url-row">
-          <input type="url" id="local-chatUrl" class="input" placeholder="https://claude.ai/chat/abc123">
-          <button id="useCurrentTab" class="btn-ghost">📋 Tab</button>
+          <input type="url" id="l-url" class="input" placeholder="https://claude.ai/chat/abc123">
+          <button id="l-tabBtn" class="btn-ghost">📋 Tab</button>
         </div>
       </div>
+
       <div class="field">
         <label class="label">Prompt</label>
-        <textarea id="local-prompt" class="textarea" rows="4" placeholder="Your prompt, error message, follow-up..."></textarea>
-        <div class="char-count"><span id="local-charCount">0</span> chars</div>
+        <textarea id="l-prompt" class="textarea" rows="4" placeholder="Your error, follow-up, next task..."></textarea>
+        <div class="char-count"><span id="l-chars">0</span> chars</div>
       </div>
+
+      <!-- File/Image attachment (multiple, up to 3) -->
       <div class="field">
-        <label class="label">Send At</label>
-        <input type="datetime-local" id="local-time" class="input">
+        <label class="label">Attach Files <span class="hint">— optional, up to 3, 4MB each</span></label>
+        <div class="attach-row">
+          <label class="btn-ghost attach-label" for="l-file">
+            📎  Choose Files
+          </label>
+          <input type="file" id="l-file" class="hidden" accept="image/*,.pdf,.txt,.py,.js,.json,.csv" multiple>
+        </div>
+        <div id="l-fileList" class="file-list"></div>
       </div>
-      <button id="local-addBtn" class="btn-primary">⏰ Schedule Prompt</button>
-      <div id="local-error" class="error hidden"></div>
-    </section>
+
+      <div class="field">
+        <label class="label">
+          Send At
+          <span class="hint"> — default is 8 hrs from now (change to any time you want)</span>
+        </label>
+        <input type="datetime-local" id="l-time" class="input">
+      </div>
+
+      <button class="btn-primary" id="l-addBtn">⏰  Schedule Prompt</button>
+      <button class="btn-primary secondary hidden" id="l-cancelEditBtn">Cancel Edit</button>
+      <div id="l-err" class="status-msg error hidden"></div>
+      <button class="btn-primary secondary" id="l-exportBtn">📥  Export Clean Chat (auto-cleaned, no AI needed)</button>
+      <div id="l-exportStatus" class="status-msg hidden"></div>
+    </div>
   </div>
 
-  <!-- ── CLOUD MODE ─────────────────────────────────────────────── -->
-  <div id="panel-cloud" class="hidden">
+  <!-- ── CLOUD PANEL ── -->
 
-    <!-- Step 1: Server connection -->
-    <section class="card">
-      <h2 class="section-title">① Your Server</h2>
-      <p class="info-text">Deploy our backend code to your own free Railway server. It runs 24/7 and sends prompts even when your laptop is off.</p>
-      <a href="https://railway.app/new/template" target="_blank" class="btn-deploy">🚀 Deploy to Railway (free)</a>
-      <div class="field" style="margin-top:12px">
-        <label class="label">Your Server URL</label>
+
+  <div class="panel hidden" id="panel-cloud">
+    <div class="info-card">
+      <div class="info-title">🔒  Where your data lives</div>
+      <div class="info-grid">
+        <div class="info-item">💾<span><strong>Storage</strong> SQLite file on your own server only</span></div>
+        <div class="info-item">🔑 <span><strong>Auth</strong> API key you generate — no Google login needed</span></div>
+        <div class="info-item">🔐<span><strong>Encryption</strong> AES-256-GCM on all credentials</span></div>
+        <div class="info-item">🙈<span><strong>Privacy</strong> Only you can access your server</span></div>
+      </div>
+    </div>
+
+    <div class="card" id="c-providerCard">
+      <div class="card-title">🖥️  ① Choose Cloud Provider</div>
+      <div class="provider-grid" id="providerGrid">
+        <div class="provider-card" data-provider="railway"><div class="provider-logo">🚂</div><div class="provider-name">Railway</div><div class="provider-badge free">Free</div></div>
+        <div class="provider-card" data-provider="render"><div class="provider-logo">🎨</div><div class="provider-name">Render</div><div class="provider-badge free">Free</div></div>
+        <div class="provider-card" data-provider="flyio"><div class="provider-logo">✈️</div><div class="provider-name">Fly.io</div><div class="provider-badge free">Free</div></div>
+        <div class="provider-card" data-provider="digitalocean"><div class="provider-logo">🌊</div><div class="provider-name">DigitalOcean</div><div class="provider-badge paid">$5/mo</div></div>
+        <div class="provider-card" data-provider="aws"><div class="provider-logo">☁️</div><div class="provider-name">AWS/GCP/Azure</div><div class="provider-badge adv">Advanced</div></div>
+        <div class="provider-card" data-provider="vps"><div class="provider-logo">🖥️</div><div class="provider-name">Own VPS</div><div class="provider-badge adv">Advanced</div></div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="c-deployCard">
+      <div class="card-title">🚀  ② Deploy Your Server</div>
+      <div id="c-deployInstructions"></div>
+    </div>
+
+    <div class="card hidden" id="c-connectCard">
+      <div class="card-title">🔌  ③ Connect Extension to Server</div>
+      <div id="c-connected" class="connect-row hidden"><div class="connect-dot"></div><span class="connect-text">Connected</span></div>
+      <div class="field">
+        <label class="label">Server URL</label>
         <div class="url-row">
-          <input type="url" id="cloud-serverUrl" class="input" placeholder="https://your-app.railway.app">
-          <button id="cloud-testBtn" class="btn-ghost">Test</button>
+          <input type="url" id="c-serverUrl" class="input" placeholder="https://your-app.railway.app">
+          <button id="c-testBtn" class="btn-ghost">Test</button>
         </div>
-        <div id="cloud-serverStatus" class="status-msg hidden"></div>
       </div>
       <div class="field">
-        <label class="label">Your Server API Key <span class="hint">— from setup page</span></label>
+        <label class="label">API Key <span class="hint">— from setup page</span></label>
         <div class="url-row">
-          <input type="password" id="cloud-apiKey" class="input" placeholder="aps-xxxxxxxxxxxx">
-          <button id="cloud-toggleKey" class="btn-ghost">👁</button>
+          <input type="password" id="c-apiKey" class="input" placeholder="aps-xxxxxxxxxxxx">
+          <button id="c-toggleKey" class="btn-ghost">👁️</button>
         </div>
       </div>
-      <button id="cloud-connectBtn" class="btn-primary">Connect Server</button>
-      <div id="cloud-connectStatus" class="status-msg hidden"></div>
-    </section>
+      <button class="btn-primary" id="c-connectBtn">🔌  Connect</button>
+      <div id="c-serverStatus" class="status-msg hidden"></div>
+    </div>
 
-    <!-- Step 2: Credentials per platform (shown after server connected) -->
-    <section class="card hidden" id="cloud-credSection">
-      <h2 class="section-title">② Login Credentials <span class="secure-badge">Encrypted</span></h2>
-      <p class="info-text">Choose how your server logs in to each AI platform on your behalf. Stored encrypted — only your server can read them.</p>
-
+    <div class="card hidden" id="c-credCard">
+      <div class="card-title">🔑  ④ Login Credentials <span class="secure-badge">✅ AES-256</span></div>
+      <div id="c-savedCreds"></div>
       <div class="field">
         <label class="label">Platform</label>
-        <select id="cred-platform" class="select">
+        <select id="c-credPlatform" class="input">
           <option value="claude">🟠 Claude.ai</option>
           <option value="chatgpt">🟢 ChatGPT</option>
           <option value="gemini">🔵 Gemini</option>
           <option value="perplexity">🟣 Perplexity</option>
         </select>
       </div>
-
-      <div class="auth-toggle">
-        <button class="auth-tab active" data-type="cookie">🍪 Session Cookie</button>
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-type="cookie">🍪  Session Cookie</button>
         <button class="auth-tab" data-type="password">🔐 Email + Password</button>
       </div>
-
-      <!-- Cookie form -->
-      <div id="cookie-form">
-        <div class="field">
-          <label class="label">Session Cookie</label>
-          <textarea id="cred-cookie" class="textarea" rows="3" placeholder="Paste your session cookie here..."></textarea>
-          <div class="hint-block">How to find it: Open the AI site → F12 → Application → Cookies → copy the session token value</div>
-        </div>
+      <div id="c-cookieForm">
+        <textarea id="c-cookie" class="textarea" rows="2" placeholder="Paste session cookie..."></textarea>
+        <div class="hint-box">ℹ️ F12 → Application → Cookies → copy session token value</div>
       </div>
-
-      <!-- Password form -->
-      <div id="password-form" class="hidden">
-        <div class="field">
-          <label class="label">Email</label>
-          <input type="email" id="cred-email" class="input" placeholder="your@email.com">
-        </div>
-        <div class="field">
-          <label class="label">Password</label>
-          <input type="password" id="cred-password" class="input" placeholder="Your password">
-        </div>
+      <div id="c-pwForm" class="hidden">
+        <div class="field"><input type="email" id="c-email" class="input" placeholder="your@email.com"></div>
+        <div class="field"><input type="password" id="c-password" class="input" placeholder="Password"></div>
       </div>
+      <button class="btn-primary sm" id="c-saveCredBtn">💾  Save Credentials</button>
+      <div id="c-credStatus" class="status-msg hidden"></div>
+    </div>
 
-      <button id="cloud-saveCredBtn" class="btn-primary small">Save Credentials</button>
-      <div id="cred-status" class="status-msg hidden"></div>
-
-      <!-- Saved credentials list -->
-      <div id="cloud-savedCreds" style="margin-top:10px"></div>
-    </section>
-
-    <!-- Step 3: Schedule form (shown after server connected) -->
-    <section class="card hidden" id="cloud-scheduleSection">
-      <h2 class="section-title">③ Schedule a Prompt</h2>
+    <div class="card hidden" id="c-schedCard">
+      <div class="card-title">⏰  ⑤ Schedule a Prompt</div>
       <div class="field">
         <label class="label">Platform</label>
-        <select id="cloud-platform" class="select">
+        <select id="c-platform" class="input">
           <option value="Claude.ai">🟠 Claude.ai</option>
           <option value="ChatGPT">🟢 ChatGPT</option>
           <option value="Gemini">🔵 Gemini</option>
@@ -146,53 +206,69 @@
         </select>
       </div>
       <div class="field">
-        <label class="label">Specific Chat URL</label>
+        <label class="label">Chat URL</label>
         <div class="url-row">
-          <input type="url" id="cloud-chatUrl" class="input" placeholder="https://claude.ai/chat/abc123">
-          <button id="cloud-useTab" class="btn-ghost">📋 Tab</button>
+          <input type="url" id="c-url" class="input" placeholder="https://claude.ai/chat/abc123">
+          <button id="c-tabBtn" class="btn-ghost">📋</button>
         </div>
       </div>
       <div class="field">
         <label class="label">Prompt</label>
-        <textarea id="cloud-prompt" class="textarea" rows="4" placeholder="Your prompt, error, follow-up..."></textarea>
+        <textarea id="c-prompt" class="textarea" rows="3" placeholder="Your prompt..."></textarea>
       </div>
       <div class="field">
         <label class="label">Send At</label>
-        <input type="datetime-local" id="cloud-time" class="input">
+        <input type="datetime-local" id="c-time" class="input">
       </div>
-      <button id="cloud-addBtn" class="btn-primary">⏰ Schedule (Cloud)</button>
-      <div id="cloud-error" class="error hidden"></div>
-    </section>
+      <button class="btn-primary" id="c-addBtn">☁️  Schedule (Cloud)</button>
+      <div id="c-err" class="status-msg error hidden"></div>
+    </div>
   </div>
 
-  <!-- ── PHONE MODE ────────────────────────────────────────────── -->
-  <div id="panel-phone" class="hidden">
-    <section class="card">
-      <div class="coming-soon">
-        <div style="font-size:36px">📱</div>
-        <h3>Phone Mode</h3>
-        <p>Android companion app coming in Phase 4.</p>
-        <p class="empty-sub">It will automatically open the AI chat on your phone and send the prompt — even when your laptop is off.</p>
-        <p style="margin-top:12px;font-size:11px;color:#a78bfa">For now, use Cloud mode for 24/7 scheduling.</p>
+  <!-- ── PHONE PANEL ── -->
+  <div class="panel hidden" id="panel-phone">
+    <div class="card">
+      <div class="phone-mode-hero">📱</div>
+      <div class="card-title" style="justify-content:center">Phone Mode via Kiwi Browser</div>
+      <div class="phone-steps">
+        <div class="phone-step">
+          <div class="step-num">1</div>
+          <div class="step-text">Install <strong>Kiwi Browser</strong> on your Android phone — it's a Chrome-based browser that supports extensions</div>
+        </div>
+        <div class="phone-step">
+          <div class="step-num">2</div>
+          <div class="step-text">Open Kiwi → type <code>chrome://extensions</code> → turn on Developer Mode</div>
+        </div>
+        <div class="phone-step">
+          <div class="step-num">3</div>
+          <div class="step-text">Click Load Unpacked → select the <code>extension</code> folder from your phone (transfer via USB or Google Drive)</div>
+        </div>
+        <div class="phone-step">
+          <div class="step-num">4</div>
+          <div class="step-text">The extension works exactly the same — schedule prompts on your phone and they fire automatically even when your laptop is off</div>
+        </div>
       </div>
-    </section>
+      <a href="https://play.google.com/store/apps/details?id=com.kiwibrowser.browser" target="_blank" class="btn-primary" style="margin-top:12px;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">
+        📲 Get Kiwi Browser (Free)
+      </a>
+      <div class="hint-box" style="margin-top:10px"><strong>iOS?</strong> Apple doesn't allow browser extensions on iPhone. Use Cloud mode instead — it works 24/7 from your own server.</div>
+    </div>
   </div>
 
-  <!-- ── SCHEDULE LIST (shared) ──────────────────────────────── -->
-  <section class="card">
-    <div class="list-header">
-      <h2 class="section-title">Scheduled</h2>
-      <span id="pendingBadge" class="badge hidden">0</span>
-    </div>
-    <div id="scheduleList">
-      <div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <p>No prompts scheduled yet.</p>
+  <!-- Shared schedule list -->
+  <div class="panel" style="padding-top:0">
+    <div class="card">
+      <div class="list-header">
+        <div class="card-title" style="margin-bottom:0">📋  Scheduled</div>
+        <span id="badge" class="badge hidden">0</span>
+      </div>
+      <div id="schedList">
+        <div class="empty-state"><div class="empty-icon">📭</div><p>No prompts scheduled yet.</p></div>
       </div>
     </div>
-  </section>
+  </div>
 
-  <footer class="footer">Local mode is 100% free · No data leaves your device</footer>
+  <div class="footer">100% free · open source · your data stays on your device</div>
 </div>
 <script src="popup.js"></script>
 </body>

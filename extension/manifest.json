@@ -5,7 +5,7 @@
   "description": "Schedule prompts to any AI chatbot. Works locally, via phone notification, or 24/7 via cloud — even when your laptop is off.",
   "permissions": [
     "alarms", "storage", "tabs", "scripting",
-    "notifications", "identity"
+    "notifications", "identity", "downloads"
   ],
   "host_permissions": [
     "https://claude.ai/*",
