@@ -1,9 +1,9 @@
 // ─── AI Prompt Scheduler — Background Service Worker ─────────────────────────
-const ALARM_PREFIX   = 'aps-';
-const INJECT_DELAY   = 4500;
-const RETRY_DELAY_MS = 10 * 60 * 1000;
-const MAX_RETRIES    = 6;
-const RESPONSE_WAIT_TIMEOUT = 120000; // max 2 min to wait for AI response to finish
+const ALARM_PREFIX       = 'aps-';
+const RETRY_ALARM_PREFIX = 'aps-retry-';
+const INJECT_DELAY       = 4500;
+const RETRY_DELAY_MIN    = 10; // minutes — chrome.alarms works in minutes, not ms
+const MAX_RETRIES        = 6;
 
 chrome.runtime.onStartup.addListener(handleStartup);
 chrome.runtime.onInstalled.addListener(handleStartup);
@@ -12,27 +12,39 @@ async function handleStartup() {
   const { local_schedules: schedules = [] } = await chrome.storage.local.get('local_schedules');
   const now = Date.now();
   for (const s of schedules) {
-    if (s.status !== 'pending') continue;
+    if (!['pending', 'waiting_limit'].includes(s.status)) continue;
     if (s.scheduledTime <= now) {
       console.log('[APS] Missed schedule, firing now:', s.id);
       fireSchedule(s.id);
-    } else {
+    } else if (s.status === 'pending') {
       chrome.alarms.create(ALARM_PREFIX + s.id, { when: s.scheduledTime });
     }
+    // Note: if status is 'waiting_limit', its retry alarm (aps-retry-<id>) was
+    // already created before — chrome.alarms persist across service worker
+    // restarts and even browser restarts, so we don't need to recreate it here.
   }
 }
 
+// ── Single alarm listener handles BOTH the original fire time AND retries ─────
+// Using chrome.alarms (not setTimeout) is essential: Chrome kills this service
+// worker after ~30 seconds of inactivity, silently cancelling any setTimeout
+// that hasn't fired yet. chrome.alarms survives that — it's designed exactly
+// for "do something later" in Manifest V3, unlike setTimeout.
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (!alarm.name.startsWith(ALARM_PREFIX)) return;
-  await fireSchedule(alarm.name.replace(ALARM_PREFIX, ''));
+  if (alarm.name.startsWith(RETRY_ALARM_PREFIX)) {
+    await fireSchedule(alarm.name.replace(RETRY_ALARM_PREFIX, ''));
+  } else if (alarm.name.startsWith(ALARM_PREFIX)) {
+    await fireSchedule(alarm.name.replace(ALARM_PREFIX, ''));
+  }
 });
 
-async function fireSchedule(scheduleId, retryCount = 0) {
+async function fireSchedule(scheduleId) {
   const { local_schedules: schedules = [] } = await chrome.storage.local.get('local_schedules');
   const schedule = schedules.find(s => s.id === scheduleId);
   if (!schedule) return;
   if (!['pending', 'waiting_limit'].includes(schedule.status)) return;
 
+  const retryCount = schedule.retryCount || 0;
   await updateStatus(scheduleId, 'running');
 
   try {
@@ -43,18 +55,19 @@ async function fireSchedule(scheduleId, retryCount = 0) {
     const limitCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: checkUsageLimit });
     if (limitCheck?.[0]?.result) {
       await chrome.tabs.remove(tab.id).catch(() => {});
+
       if (retryCount < MAX_RETRIES) {
-        await updateStatus(scheduleId, 'waiting_limit', `Limit active — retry ${retryCount + 1}/${MAX_RETRIES}`);
-        notify('⏳ Limit Reached', `${schedule.platform} limit active. Retrying in 10 min.`);
-        setTimeout(() => fireSchedule(scheduleId, retryCount + 1), RETRY_DELAY_MS);
+        await updateStatus(scheduleId, 'waiting_limit', `Limit active — retry ${retryCount + 1}/${MAX_RETRIES}`, retryCount + 1);
+        notify('⏳ Limit Reached', `${schedule.platform} limit active. Retrying in ${RETRY_DELAY_MIN} min.`);
+        // chrome.alarms — survives service worker shutdown, unlike setTimeout
+        chrome.alarms.create(RETRY_ALARM_PREFIX + scheduleId, { delayInMinutes: RETRY_DELAY_MIN });
       } else {
         await updateStatus(scheduleId, 'failed', 'Gave up after repeated limit errors.');
-        notify('❌ Still Limited', `${schedule.platform} limit never cleared.`);
+        notify('❌ Still Limited', `${schedule.platform} limit never cleared after ${MAX_RETRIES} tries.`);
       }
       return;
     }
 
-    // Send the prompt
     await chrome.scripting.executeScript({
       target: { tabId: tab.id }, func: injectAndSendPrompt,
       args: [schedule.prompt, schedule.platform]
@@ -63,7 +76,6 @@ async function fireSchedule(scheduleId, retryCount = 0) {
     await updateStatus(scheduleId, 'sent');
     notify('✅ Prompt Sent!', `Sent to ${schedule.platform} — capturing response...`);
 
-    // ── Wait for the AI response to finish, then capture + export full text ────
     const respResult = await chrome.scripting.executeScript({
       target: { tabId: tab.id }, func: waitAndCaptureResponse,
       args: [schedule.platform]
@@ -130,7 +142,6 @@ function injectAndSendPrompt(promptText, platform) {
   tryInject();
 }
 
-// ── Injected: wait for AI to finish streaming, return full response text ──────
 function waitAndCaptureResponse(platform) {
   const STOP_BTN = {
     'Claude.ai':  'button[aria-label="Stop generating"]',
@@ -149,13 +160,10 @@ function waitAndCaptureResponse(platform) {
   return new Promise((resolve) => {
     const startTime = Date.now();
     const MAX_WAIT = 120000;
-
     function poll() {
       const stopBtn = document.querySelector(STOP_BTN);
       const elapsed = Date.now() - startTime;
-
       if (!stopBtn && elapsed > 3000) {
-        // Generation finished (or never started within grace period)
         setTimeout(() => {
           const msgs = document.querySelectorAll(MSG_SELECTOR);
           const last = msgs[msgs.length - 1];
@@ -175,7 +183,6 @@ function waitAndCaptureResponse(platform) {
   });
 }
 
-// ── Deterministic transcript cleaner (same logic as popup.js, no AI call) ─────
 function cleanTranscript(rawText) {
   const NOISE_PATTERNS = [
     /^load (earlier|later) messages$/i, /^show (more|less)$/i, /^(zip|download)$/i,
@@ -201,7 +208,11 @@ function cleanTranscript(rawText) {
   return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// ── Save response preview in storage + export full text as downloadable file ──
+// ── Save response + export as file ─────────────────────────────────────────────
+// NOTE: URL.createObjectURL does NOT exist in Manifest V3 service workers
+// (this was the "URL.createObjectURL is not a function" crash). Service workers
+// have no DOM/Blob URL support at all. The correct method here is a base64
+// data: URL built manually — that works fine from a service worker context.
 async function saveResponseAndExport(scheduleId, schedule, fullResponse) {
   const { local_schedules: list = [] } = await chrome.storage.local.get('local_schedules');
   const idx = list.findIndex(s => s.id === scheduleId);
@@ -211,38 +222,42 @@ async function saveResponseAndExport(scheduleId, schedule, fullResponse) {
     await chrome.storage.local.set({ local_schedules: list });
   }
 
-  // No raw URL included — some AI tools can't follow links and it just adds noise.
   const md = [
-    `# AI Prompt Scheduler — Export`,
-    ``,
+    `# AI Prompt Scheduler — Export`, ``,
     `**Platform:** ${schedule.platform}`,
-    `**Sent at:** ${new Date().toLocaleString()}`,
-    ``,
-    `**You:**`,
-    schedule.prompt,
-    ``,
-    `---`,
-    ``,
-    `**${schedule.platform}:**`,
-    cleanedResponse
+    `**Sent at:** ${new Date().toLocaleString()}`, ``,
+    `**You:**`, schedule.prompt, ``, `---`, ``,
+    `**${schedule.platform}:**`, cleanedResponse
   ].join('\n');
 
-  const blob = new Blob([md], { type: 'text/markdown' });
-  const blobUrl = URL.createObjectURL(blob);
-  const filename = `ai-scheduler/${schedule.platform.replace(/[^a-z0-9]/gi,'_')}_${Date.now()}.md`;
+  try {
+    const base64 = base64EncodeUnicode(md);
+    const dataUrl = `data:text/markdown;base64,${base64}`;
+    const filename = `ai-scheduler/${schedule.platform.replace(/[^a-z0-9]/gi,'_')}_${Date.now()}.md`;
 
-  chrome.downloads.download({ url: blobUrl, filename, saveAs: false }, () => {
-    URL.revokeObjectURL(blobUrl);
-    if (chrome.runtime.lastError) console.error('[APS] Download error:', chrome.runtime.lastError.message);
-  });
+    chrome.downloads.download({ url: dataUrl, filename, saveAs: false }, () => {
+      if (chrome.runtime.lastError) console.error('[APS] Download error:', chrome.runtime.lastError.message);
+    });
+  } catch (err) {
+    console.error('[APS] Export encoding error:', err.message);
+  }
 }
 
-async function updateStatus(id, status, errorMsg) {
+// Safely base64-encode text that may contain unicode characters
+function base64EncodeUnicode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+async function updateStatus(id, status, errorMsg, retryCount) {
   const { local_schedules: list = [] } = await chrome.storage.local.get('local_schedules');
   const idx = list.findIndex(s => s.id === id);
   if (idx !== -1) {
     list[idx].status = status; list[idx].updatedAt = Date.now();
     if (errorMsg) list[idx].errorMsg = errorMsg;
+    if (retryCount !== undefined) list[idx].retryCount = retryCount;
     await chrome.storage.local.set({ local_schedules: list });
   }
 }

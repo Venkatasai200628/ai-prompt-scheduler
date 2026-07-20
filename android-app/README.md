@@ -107,3 +107,24 @@ The `tar@6.2.1`, `glob@9.3.5` deprecation warnings and "2 high severity vulnerab
 are from Capacitor CLI's own build dependencies (dev-time only tools) — not from your app's
 code, and not something an end user of your APK is ever exposed to. Safe to ignore for this
 project. Do **not** run `npm audit fix --force` — it can break Capacitor's version pinning.
+
+---
+
+## Important Update — What This App Actually Does
+
+Earlier versions of this project description suggested the Android app would
+automate typing into AI chat pages directly on your phone, similar to how the
+Chrome extension's Local mode works. **That is not technically possible on
+Android** — the OS doesn't allow apps to silently inject input into other
+apps/webviews in the background (this is a deliberate Android security
+restriction, not a limitation of this project specifically).
+
+**What this app actually does instead:** it's a native companion client for
+your own **Cloud server** (the same backend in `backend-v2/`, deployed to
+Railway/Render/etc.). You connect the app to your server URL + API key
+(exactly like the Chrome extension's Cloud tab), and all scheduling/sending
+happens on your server — which is genuinely running 24/7, so it works
+regardless of whether your phone is on, off, locked, or out of battery.
+
+This is a more honest and more reliable design than trying to fake local
+automation on the phone.
