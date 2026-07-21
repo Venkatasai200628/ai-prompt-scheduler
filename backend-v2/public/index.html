@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI Prompt Scheduler</title>
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <div class="header-icon">⏰</div>
+    <div>
+      <div class="header-title">AI Prompt Scheduler</div>
+      <div class="header-sub">This page IS your server — no app needed</div>
+    </div>
+    <button class="dark-toggle" id="darkToggle">🌙</button>
+  </header>
+
+  <div class="panel">
+
+    <!-- Shown only once, on a phone that hasn't entered its key yet -->
+    <div class="card" id="loginCard">
+      <div class="card-title">Enter Your API Key</div>
+      <p class="info-text">This is the key you saved during first-time server setup. It's remembered on this phone/browser after you enter it once.</p>
+      <div class="field">
+        <div class="url-row">
+          <input type="password" id="apiKeyInput" class="input" placeholder="aps-xxxxxxxxxxxx">
+          <button id="toggleKeyBtn" class="btn-ghost" type="button">Show</button>
+        </div>
+      </div>
+      <button class="btn-primary" id="loginBtn" type="button">Unlock This Dashboard</button>
+      <div id="loginStatus" class="status-msg hidden"></div>
+    </div>
+
+    <!-- Main dashboard, shown after key is entered -->
+    <div class="hidden" id="mainContent">
+
+      <div class="card">
+        <div class="card-title">Schedule a Prompt</div>
+        <div class="field">
+          <label class="label">Platform</label>
+          <select id="platform" class="input">
+            <option value="Claude.ai">Claude.ai</option>
+            <option value="ChatGPT">ChatGPT</option>
+            <option value="Gemini">Gemini</option>
+            <option value="Perplexity">Perplexity</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Chat URL</label>
+          <input type="url" id="chatUrl" class="input" placeholder="https://claude.ai/chat/abc123">
+        </div>
+        <div class="field">
+          <label class="label">Prompt</label>
+          <textarea id="prompt" class="textarea" rows="4" placeholder="Your prompt..."></textarea>
+        </div>
+        <div class="field">
+          <label class="label">Send At</label>
+          <input type="datetime-local" id="sendTime" class="input">
+        </div>
+        <button class="btn-primary" id="addBtn" type="button">Schedule Prompt</button>
+        <div id="addStatus" class="status-msg hidden"></div>
+      </div>
+
+      <div class="card" id="listCard">
+        <div class="list-header">
+          <div class="card-title" style="margin-bottom:0">Scheduled</div>
+          <span id="badge" class="badge hidden">0</span>
+        </div>
+        <div id="schedList"></div>
+      </div>
+
+      <button class="btn-ghost full-width" id="logoutBtn" type="button">Forget API Key on This Device</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    Add to your home screen for an app-like icon: browser menu → "Add to Home Screen"
+  </div>
+</div>
+<script src="/dashboard/dashboard.js"></script>
+</body>
+</html>
