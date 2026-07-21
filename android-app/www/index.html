@@ -13,7 +13,7 @@
     <div class="header-icon">⏰</div>
     <div>
       <div class="header-title">AI Prompt Scheduler</div>
-      <div class="header-sub">Your server does the work — this app just controls it</div>
+      <div class="header-sub">Controls your server — doesn't automate your phone</div>
     </div>
     <button class="dark-toggle" id="darkToggle">🌙</button>
   </header>
@@ -21,17 +21,17 @@
   <div class="panel">
 
     <div class="info-card">
-      <div class="info-title">🔌 How this app works</div>
+      <div class="info-title">How this app works</div>
       <div class="info-text">
-        This app does <strong>not</strong> automate anything on your phone directly — Android
-        doesn't allow apps to silently type into other apps in the background. Instead, this
-        app talks to <strong>your own server</strong> (the one you deployed on Railway/Render/etc.),
-        which does the actual work 24/7. That's why it works even if your phone is off.
+        This app sends your scheduled prompts to <strong>your own server</strong>
+        (the one you set up on Railway or similar). Your server does the actual
+        work of opening the chat and sending the message — this app just tells
+        it what to do and when.
       </div>
     </div>
 
     <div class="card" id="connectCard">
-      <div class="card-title">🖥️ Your Server</div>
+      <div class="card-title">Your Server</div>
       <div id="connected" class="connect-row hidden">
         <div class="connect-dot"></div><span class="connect-text">Connected</span>
       </div>
@@ -43,22 +43,22 @@
         <label class="label">API Key</label>
         <div class="url-row">
           <input type="password" id="apiKey" class="input" placeholder="aps-xxxxxxxxxxxx">
-          <button id="toggleKey" class="btn-ghost">👁</button>
+          <button id="toggleKey" class="btn-ghost" type="button">Show</button>
         </div>
       </div>
-      <button class="btn-primary" id="connectBtn">Connect to My Server</button>
+      <button class="btn-primary" id="connectBtn" type="button">Connect to My Server</button>
       <div id="connectStatus" class="status-msg hidden"></div>
     </div>
 
     <div class="card hidden" id="scheduleCard">
-      <div class="card-title">⏰ Schedule a Prompt</div>
+      <div class="card-title">Schedule a Prompt</div>
       <div class="field">
         <label class="label">Platform</label>
         <select id="platform" class="input">
-          <option value="Claude.ai">🟠 Claude.ai</option>
-          <option value="ChatGPT">🟢 ChatGPT</option>
-          <option value="Gemini">🔵 Gemini</option>
-          <option value="Perplexity">🟣 Perplexity</option>
+          <option value="Claude.ai">Claude.ai</option>
+          <option value="ChatGPT">ChatGPT</option>
+          <option value="Gemini">Gemini</option>
+          <option value="Perplexity">Perplexity</option>
         </select>
       </div>
       <div class="field">
@@ -73,20 +73,20 @@
         <label class="label">Send At</label>
         <input type="datetime-local" id="sendTime" class="input">
       </div>
-      <button class="btn-primary" id="addBtn">Schedule Prompt</button>
+      <button class="btn-primary" id="addBtn" type="button">Schedule Prompt</button>
       <div id="addStatus" class="status-msg hidden"></div>
     </div>
 
     <div class="card hidden" id="listCard">
       <div class="list-header">
-        <div class="card-title" style="margin-bottom:0">📋 Scheduled</div>
+        <div class="card-title" style="margin-bottom:0">Scheduled</div>
         <span id="badge" class="badge hidden">0</span>
       </div>
       <div id="schedList"></div>
     </div>
   </div>
 
-  <div class="footer">Companion app for your self-hosted server · No data goes anywhere else</div>
+  <div class="footer">Companion app for your self-hosted server</div>
 </div>
 <script src="app.js"></script>
 </body>

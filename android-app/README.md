@@ -1,130 +1,72 @@
 # AI Prompt Scheduler — Android App
 
-This folder contains a **Capacitor** project that wraps the extension logic into a real Android app.
+## What this app does, in plain terms
 
-⚠️ **Important — read this first:** I cannot compile the final `.apk` file for you — that requires
-Android Studio with the Android SDK installed, which isn't available in this environment.
-What I've built is the **complete source project**. Building the APK yourself takes about
-10 minutes with free tools. Steps below.
+This app is a **remote control** for your own server (the one you set up on
+Railway, Render, etc.). It does not type into Claude/ChatGPT on your phone
+itself — that part happens on your server, 24/7, whether your phone is
+nearby or not.
 
----
+Your phone app's only jobs:
+1. Let you type a prompt and pick a time
+2. Send that information to your server
+3. Show you the list of what's scheduled and whether it's been sent yet
 
-## What You Need (all free)
+## What you need before building
 
-1. **Node.js** — https://nodejs.org (LTS version)
-2. **Android Studio** — https://developer.android.com/studio
+1. **Node.js** — https://nodejs.org (only needed on your computer, once, to build the app)
+2. **Java JDK 17** — https://adoptium.net/temurin/releases/?version=17
+3. Your Cloud server already deployed (see `backend-v2/INSTALL.md`) with its
+   URL and API key ready
 
----
+## How to build the actual installable APK file
 
-## Build Steps
+Open a terminal in this `android-app` folder and run these commands one at a time:
 
-### 1. Install dependencies
 ```bash
-cd android-app
 npm install
-```
-
-### 2. Add the Android platform
-```bash
 npx cap add android
-```
-
-### 3. Sync the web code into the Android project
-```bash
 npx cap sync android
-```
-
-### 4. Open in Android Studio
-```bash
-npx cap open android
-```
-This launches Android Studio with your project already loaded.
-
-### 5. Build the APK
-In Android Studio:
-- Wait for Gradle sync to finish (bottom status bar)
-- Click **Build** menu → **Build Bundle(s) / APK(s)** → **Build APK(s)**
-- When done, click **locate** in the popup notification
-- Your APK is at: `android/app/build/outputs/apk/debug/app-debug.apk`
-
-### 6. Install on your phone
-- Transfer the APK to your phone (USB, email, Google Drive)
-- Tap the file to install (allow "Install from unknown sources" if asked)
-
----
-
-## What This App Does
-
-Same functionality as the Chrome extension:
-- Schedule prompts to Claude, ChatGPT, Gemini, Perplexity
-- Fires automatically at the set time — works even if Chrome isn't open
-- Uses Android's `AlarmManager` (native scheduling) so it survives phone restarts
-- Same dark mode, same data storage approach — nothing leaves your phone in Local mode
-
-## For a signed/release APK (to share with others)
-
-Debug APKs work fine for personal use but show a security warning to others.
-For a proper release build:
-1. In Android Studio: **Build → Generate Signed Bundle / APK**
-2. Create a new keystore (follow the wizard — save the keystore file somewhere safe)
-3. Select **APK** → **release** → Finish
-4. Output: `android/app/release/app-release.apk`
-
----
-
-## Build APK WITHOUT Android Studio (command line only)
-
-If you got "Unable to launch Android Studio. Is it installed?" — you don't actually need
-Android Studio at all. `npx cap add android` already generated a Gradle wrapper. Just run:
-
-### Windows (PowerShell)
-```powershell
 cd android
+```
+
+**Windows:**
+```powershell
 .\gradlew assembleDebug
 ```
 
-### Mac/Linux
+**Mac/Linux:**
 ```bash
-cd android
 ./gradlew assembleDebug
 ```
 
-**Requirement:** Java JDK 17 must be installed first.
-- Check if you have it: `java -version`
-- If not, download from: https://adoptium.net/temurin/releases/?version=17
+The first run downloads some files and takes 5-10 minutes. After that it's fast.
 
-First run downloads Gradle dependencies (~5-10 min, one time only). After that it's fast.
-
-**Your APK will be at:**
+**Your APK will be here:**
 ```
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Transfer that file to your phone and tap to install.
+Copy that file to your phone (USB cable, email, Google Drive — any way you like)
+and tap it to install. Your phone may ask you to allow "install from unknown
+sources" — that's normal for apps not from the Play Store, allow it.
 
-### About the npm warnings you saw
-The `tar@6.2.1`, `glob@9.3.5` deprecation warnings and "2 high severity vulnerabilities"
-are from Capacitor CLI's own build dependencies (dev-time only tools) — not from your app's
-code, and not something an end user of your APK is ever exposed to. Safe to ignore for this
-project. Do **not** run `npm audit fix --force` — it can break Capacitor's version pinning.
+## How to use the app once installed
 
----
+1. Open the app
+2. Paste your server URL (e.g. `https://your-app.railway.app`)
+3. Paste your API key (starts with `aps-`)
+4. Tap **Connect to My Server**
+5. Once connected, fill in the schedule form and tap **Schedule Prompt**
+6. Check the **Scheduled** list to see status: Pending → Sending → Sent
 
-## Important Update — What This App Actually Does
+That's it. Your server does the rest, exactly like the Chrome extension's
+Cloud mode does.
 
-Earlier versions of this project description suggested the Android app would
-automate typing into AI chat pages directly on your phone, similar to how the
-Chrome extension's Local mode works. **That is not technically possible on
-Android** — the OS doesn't allow apps to silently inject input into other
-apps/webviews in the background (this is a deliberate Android security
-restriction, not a limitation of this project specifically).
+## If something doesn't work
 
-**What this app actually does instead:** it's a native companion client for
-your own **Cloud server** (the same backend in `backend-v2/`, deployed to
-Railway/Render/etc.). You connect the app to your server URL + API key
-(exactly like the Chrome extension's Cloud tab), and all scheduling/sending
-happens on your server — which is genuinely running 24/7, so it works
-regardless of whether your phone is on, off, locked, or out of battery.
-
-This is a more honest and more reliable design than trying to fake local
-automation on the phone.
+| Problem | Likely cause |
+|---|---|
+| "Wrong API key" | Double-check you copied the whole key, no missing characters |
+| "Could not reach the server" | Check your server URL is correct and your phone has internet |
+| Schedule stuck on "Pending" forever | Check your server logs — it may be waiting on a usage limit, or your login credentials may need refreshing (see `backend-v2/SECURITY.md`) |

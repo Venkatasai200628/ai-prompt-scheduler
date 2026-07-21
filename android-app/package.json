@@ -1,14 +1,13 @@
 {
   "name": "ai-prompt-scheduler-android",
   "version": "1.0.0",
-  "description": "Android app wrapper for AI Prompt Scheduler",
+  "description": "Android companion app for AI Prompt Scheduler — connects to your own Cloud server",
   "scripts": {
-    "build-apk": "cap sync android && cap open android"
+    "build-apk": "npx cap sync android && npx cap open android"
   },
   "dependencies": {
     "@capacitor/core": "^6.0.0",
-    "@capacitor/android": "^6.0.0",
-    "@capacitor/local-notifications": "^6.0.0"
+    "@capacitor/android": "^6.0.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.0.0"

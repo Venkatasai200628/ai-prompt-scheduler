@@ -1,143 +1,212 @@
-// ─── AI Prompt Scheduler — Android App ────────────────────────────────────────
-// This app is a native client for YOUR OWN Cloud server. It does not try to
-// automate anything on the phone itself — it just makes API calls to the
-// server (the same one the Chrome extension's Cloud mode talks to). That
-// server does the real work with Playwright, 24/7, regardless of phone state.
+// AI Prompt Scheduler — Android App
+// This app is a remote control for YOUR OWN server. It does not automate
+// anything on the phone itself — it sends requests to your server (the same
+// backend that the Chrome extension's Cloud mode uses), and your server does
+// the actual work of opening the AI chat and sending the prompt.
 
-let serverUrl = '', apiKey = '', connected = false;
+var serverUrl = '';
+var apiKey = '';
+var connected = false;
 
-document.addEventListener('DOMContentLoaded', async () => {
-  await loadDark();
-  await loadConnection();
+document.addEventListener('DOMContentLoaded', function () {
+  loadDarkMode();
+  loadSavedConnection();
   setDefaultTime();
   setupListeners();
 });
 
-async function loadDark() {
-  const v = localStorage.getItem('aps_darkMode');
-  if (v === 'true') { document.body.classList.add('dark'); $('darkToggle').textContent = '☀️'; }
+function loadDarkMode() {
+  var v = localStorage.getItem('aps_darkMode');
+  if (v === 'true') {
+    document.body.classList.add('dark');
+    document.getElementById('darkToggle').textContent = '☀️';
+  }
 }
 
-async function loadConnection() {
+function loadSavedConnection() {
   serverUrl = localStorage.getItem('aps_serverUrl') || '';
   apiKey = localStorage.getItem('aps_apiKey') || '';
-  if (serverUrl) $('serverUrl').value = serverUrl;
-  if (apiKey) $('apiKey').value = apiKey;
+  if (serverUrl) document.getElementById('serverUrl').value = serverUrl;
+  if (apiKey) document.getElementById('apiKey').value = apiKey;
   if (serverUrl && apiKey) {
     connected = true;
-    showConnected();
-    await renderList();
+    showConnectedSections();
+    renderList();
   }
 }
 
 function setupListeners() {
-  $('darkToggle').addEventListener('click', () => {
-    const isDark = document.body.classList.toggle('dark');
-    $('darkToggle').textContent = isDark ? '☀️' : '🌙';
-    localStorage.setItem('aps_darkMode', isDark);
+  document.getElementById('darkToggle').addEventListener('click', function () {
+    var isDark = document.body.classList.toggle('dark');
+    document.getElementById('darkToggle').textContent = isDark ? '☀️' : '🌙';
+    localStorage.setItem('aps_darkMode', isDark ? 'true' : 'false');
   });
-  $('connectBtn').addEventListener('click', connect);
-  $('toggleKey').addEventListener('click', () => {
-    const el = $('apiKey'); el.type = el.type === 'password' ? 'text' : 'password';
+
+  document.getElementById('connectBtn').addEventListener('click', connectToServer);
+
+  document.getElementById('toggleKey').addEventListener('click', function () {
+    var el = document.getElementById('apiKey');
+    var btn = document.getElementById('toggleKey');
+    if (el.type === 'password') { el.type = 'text'; btn.textContent = 'Hide'; }
+    else { el.type = 'password'; btn.textContent = 'Show'; }
   });
-  $('addBtn').addEventListener('click', addSchedule);
-  $('schedList').addEventListener('click', (e) => {
-    const btn = e.target.closest('.js-delete');
-    if (btn) deleteSchedule(btn.dataset.id);
+
+  document.getElementById('addBtn').addEventListener('click', addSchedule);
+
+  document.getElementById('schedList').addEventListener('click', function (e) {
+    var btn = e.target.closest('.js-delete');
+    if (btn) deleteSchedule(btn.getAttribute('data-id'));
   });
 }
 
-async function connect() {
-  const url = $('serverUrl').value.trim(), key = $('apiKey').value.trim();
-  const st = $('connectStatus');
-  if (!url || !key) return showSt(st, 'Enter both your server URL and API key.', 'error');
-  showSt(st, '⏳ Connecting...', '');
-  try {
-    const r = await fetch(url + '/health', { headers: { 'X-API-Key': key } });
-    if (r.status === 401) return showSt(st, '❌ Wrong API key.', 'error');
-    if (!r.ok) return showSt(st, '❌ Server error.', 'error');
-    serverUrl = url; apiKey = key; connected = true;
-    localStorage.setItem('aps_serverUrl', url);
-    localStorage.setItem('aps_apiKey', key);
-    showSt(st, '✅ Connected!', 'success');
-    showConnected();
-    await renderList();
-  } catch {
-    showSt(st, '❌ Could not reach server. Check the URL and your internet connection.', 'error');
-  }
+function connectToServer() {
+  var url = document.getElementById('serverUrl').value.trim();
+  var key = document.getElementById('apiKey').value.trim();
+  var statusEl = document.getElementById('connectStatus');
+
+  if (!url || !key) { showStatus(statusEl, 'Enter both your server URL and API key.', 'error'); return; }
+
+  showStatus(statusEl, 'Connecting...', '');
+
+  fetch(url + '/health', { headers: { 'X-API-Key': key } })
+    .then(function (res) {
+      if (res.status === 401) { showStatus(statusEl, 'Wrong API key.', 'error'); return null; }
+      if (!res.ok) { showStatus(statusEl, 'Server returned an error.', 'error'); return null; }
+      return res.json();
+    })
+    .then(function (data) {
+      if (!data) return;
+      serverUrl = url;
+      apiKey = key;
+      connected = true;
+      localStorage.setItem('aps_serverUrl', url);
+      localStorage.setItem('aps_apiKey', key);
+      showStatus(statusEl, 'Connected!', 'success');
+      showConnectedSections();
+      renderList();
+    })
+    .catch(function () {
+      showStatus(statusEl, 'Could not reach the server. Check the URL and your internet connection.', 'error');
+    });
 }
 
-function showConnected() {
-  $('connected').classList.remove('hidden');
-  $('scheduleCard').classList.remove('hidden');
-  $('listCard').classList.remove('hidden');
+function showConnectedSections() {
+  document.getElementById('connected').classList.remove('hidden');
+  document.getElementById('scheduleCard').classList.remove('hidden');
+  document.getElementById('listCard').classList.remove('hidden');
 }
 
-async function addSchedule() {
-  const platform = $('platform').value, url = $('chatUrl').value.trim();
-  const prompt = $('prompt').value.trim(), t = $('sendTime').value;
-  const st = $('addStatus');
-  if (!url) return showSt(st, 'Enter the chat URL.', 'error');
-  if (!prompt) return showSt(st, 'Enter a prompt.', 'error');
-  if (!t) return showSt(st, 'Set a time.', 'error');
-  const ts = new Date(t).getTime();
-  if (ts <= Date.now()) return showSt(st, 'Time must be in the future.', 'error');
+function addSchedule() {
+  var platform = document.getElementById('platform').value;
+  var url = document.getElementById('chatUrl').value.trim();
+  var prompt = document.getElementById('prompt').value.trim();
+  var timeVal = document.getElementById('sendTime').value;
+  var statusEl = document.getElementById('addStatus');
 
-  try {
-    await apiCall('POST', '/schedules', { platform, chat_url: url, prompt, scheduled_time: ts });
-    $('prompt').value = ''; setDefaultTime();
-    showSt(st, '✅ Scheduled! Your server will send it.', 'success');
-    await renderList();
-  } catch (e) { showSt(st, `❌ ${e.message}`, 'error'); }
+  if (!url) { showStatus(statusEl, 'Enter the chat URL.', 'error'); return; }
+  if (!prompt) { showStatus(statusEl, 'Enter a prompt.', 'error'); return; }
+  if (!timeVal) { showStatus(statusEl, 'Set a time.', 'error'); return; }
+
+  var ts = new Date(timeVal).getTime();
+  if (ts <= Date.now()) { showStatus(statusEl, 'Time must be in the future.', 'error'); return; }
+
+  apiCall('POST', '/schedules', { platform: platform, chat_url: url, prompt: prompt, scheduled_time: ts })
+    .then(function () {
+      document.getElementById('prompt').value = '';
+      setDefaultTime();
+      showStatus(statusEl, 'Scheduled! Your server will send it.', 'success');
+      renderList();
+    })
+    .catch(function (err) {
+      showStatus(statusEl, err.message, 'error');
+    });
 }
 
-async function renderList() {
-  const box = $('schedList'), badge = $('badge');
-  try {
-    const data = await apiCall('GET', '/schedules');
-    const items = data.schedules || [];
-    const pending = items.filter(s => ['pending', 'running'].includes(s.status));
-    badge.textContent = pending.length;
-    pending.length ? badge.classList.remove('hidden') : badge.classList.add('hidden');
+function renderList() {
+  var box = document.getElementById('schedList');
+  var badge = document.getElementById('badge');
 
-    if (!items.length) { box.innerHTML = '<p style="font-size:12px;color:var(--muted)">No prompts scheduled yet.</p>'; return; }
+  apiCall('GET', '/schedules')
+    .then(function (data) {
+      var items = data.schedules || [];
+      var pending = items.filter(function (s) { return s.status === 'pending' || s.status === 'running'; });
 
-    box.innerHTML = items.map(s => {
-      const lbl = { pending:'⏳ Pending', running:'🔄 Sending', sent:'✅ Sent', failed:'❌ Failed' }[s.status] || s.status;
-      return `
-        <div class="schedule-item">
-          <div class="item-top">
-            <span class="item-platform">${s.platform}</span>
-            <span class="item-status" style="background:var(--primary-lt);color:var(--primary)">${lbl}</span>
-          </div>
-          <div class="item-time">🕐 ${new Date(s.scheduled_time).toLocaleString()}</div>
-          <div class="item-prompt">${esc((s.prompt||'').slice(0,150))}</div>
-          ${s.status === 'pending' ? `<div class="item-bottom"><button class="btn-delete js-delete" data-id="${s.id}">🗑 Remove</button></div>` : ''}
-        </div>`;
-    }).join('');
-  } catch {}
+      badge.textContent = pending.length;
+      if (pending.length > 0) badge.classList.remove('hidden'); else badge.classList.add('hidden');
+
+      if (items.length === 0) {
+        box.innerHTML = '<p style="font-size:12px;color:var(--muted)">No prompts scheduled yet.</p>';
+        return;
+      }
+
+      var labels = { pending: 'Pending', running: 'Sending', sent: 'Sent', failed: 'Failed' };
+      var html = '';
+      for (var i = 0; i < items.length; i++) {
+        var s = items[i];
+        var label = labels[s.status] || s.status;
+        var promptPreview = escapeHtml((s.prompt || '').slice(0, 150));
+        var timeStr = new Date(s.scheduled_time).toLocaleString();
+
+        html += '<div class="schedule-item">';
+        html += '<div class="item-top"><span class="item-platform">' + escapeHtml(s.platform) + '</span>';
+        html += '<span class="item-status">' + label + '</span></div>';
+        html += '<div class="item-time">' + timeStr + '</div>';
+        html += '<div class="item-prompt">' + promptPreview + '</div>';
+        if (s.status === 'pending') {
+          html += '<div class="item-bottom"><button class="btn-delete js-delete" data-id="' + s.id + '">Remove</button></div>';
+        }
+        html += '</div>';
+      }
+      box.innerHTML = html;
+    })
+    .catch(function () {
+      box.innerHTML = '<p style="font-size:12px;color:var(--error-text)">Could not load schedules.</p>';
+    });
 }
 
-async function deleteSchedule(id) {
-  try { await apiCall('DELETE', `/schedules/${id}`); await renderList(); } catch {}
+function deleteSchedule(id) {
+  apiCall('DELETE', '/schedules/' + id)
+    .then(function () { renderList(); })
+    .catch(function () {});
 }
 
-async function apiCall(method, path, body) {
-  const r = await fetch(serverUrl + path, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    ...(body ? { body: JSON.stringify(body) } : {})
+function apiCall(method, path, body) {
+  var options = {
+    method: method,
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey }
+  };
+  if (body) options.body = JSON.stringify(body);
+
+  return fetch(serverUrl + path, options).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (data) {
+      if (!res.ok) throw new Error(data.error || ('Error ' + res.status));
+      return data;
+    });
   });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || `Error ${r.status}`);
-  return d;
 }
 
 function setDefaultTime() {
-  const el = $('sendTime');
-  el.min = new Date(Date.now() + 60000).toISOString().slice(0,16);
-  el.value = new Date(Date.now() + 8*3600000).toISOString().slice(0,16);
+  var el = document.getElementById('sendTime');
+  var now = new Date(Date.now() + 60000);
+  var later = new Date(Date.now() + 8 * 3600000);
+  el.min = toLocalInputValue(now);
+  el.value = toLocalInputValue(later);
 }
-function $(id) { return document.getElementById(id); }
-function showSt(el, msg, type) { el.textContent = msg; el.className = `status-msg ${type}`; el.classList.remove('hidden'); }
-function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function toLocalInputValue(date) {
+  var offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function showStatus(el, msg, type) {
+  el.textContent = msg;
+  el.className = 'status-msg ' + type;
+  el.classList.remove('hidden');
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}

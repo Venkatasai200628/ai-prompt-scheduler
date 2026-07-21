@@ -1,9 +1,5 @@
 {
   "appId": "com.aipromptscheduler.app",
   "appName": "AI Prompt Scheduler",
-  "webDir": "www",
-  "bundledWebRuntime": false,
-  "android": {
-    "allowMixedContent": true
-  }
+  "webDir": "www"
 }
