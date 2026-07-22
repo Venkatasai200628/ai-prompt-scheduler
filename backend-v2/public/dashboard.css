@@ -53,3 +53,9 @@ body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--t
 .footer { text-align:center; font-size:11px; color:var(--muted); padding:16px; }
 .hidden { display:none !important; }
 .full-width { width:100%; text-align:center; margin-top:4px; }
+.auth-toggle { display:flex; gap:6px; margin-bottom:10px; }
+.auth-tab { flex:1; padding:8px; background:var(--primary-lt); border:1.5px solid var(--border); border-radius:8px; font-size:12px; font-weight:600; color:var(--primary); }
+.auth-tab.active { background:var(--primary); color:#fff; border-color:transparent; }
+.saved-cred-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--success-bg); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:12px; }
+.cred-name { font-weight:700; color:var(--success-text); flex:1; }
+.cred-type { font-size:11px; color:var(--muted); }

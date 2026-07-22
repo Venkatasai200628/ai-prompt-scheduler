@@ -40,6 +40,23 @@ function setupListeners() {
   document.getElementById('loginBtn').addEventListener('click', unlock);
   document.getElementById('addBtn').addEventListener('click', addSchedule);
   document.getElementById('logoutBtn').addEventListener('click', forgetKey);
+  document.getElementById('saveCredBtn').addEventListener('click', saveCredential);
+
+  var authTabs = document.querySelectorAll('.auth-tab');
+  for (var i = 0; i < authTabs.length; i++) {
+    authTabs[i].addEventListener('click', function (e) {
+      for (var j = 0; j < authTabs.length; j++) authTabs[j].classList.remove('active');
+      e.currentTarget.classList.add('active');
+      var type = e.currentTarget.getAttribute('data-type');
+      document.getElementById('cookieForm').classList.toggle('hidden', type !== 'cookie');
+      document.getElementById('passwordForm').classList.toggle('hidden', type !== 'password');
+    });
+  }
+
+  document.getElementById('savedCreds').addEventListener('click', function (e) {
+    var btn = e.target.closest('.js-delete-cred');
+    if (btn) deleteCredential(btn.getAttribute('data-platform'));
+  });
 
   document.getElementById('schedList').addEventListener('click', function (e) {
     var btn = e.target.closest('.js-delete');
@@ -79,6 +96,66 @@ function forgetKey() {
 function showMainContent() {
   document.getElementById('loginCard').classList.add('hidden');
   document.getElementById('mainContent').classList.remove('hidden');
+  loadCredentials();
+}
+
+function loadCredentials() {
+  fetch('/credentials', { headers: { 'X-API-Key': apiKey } })
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      var box = document.getElementById('savedCreds');
+      var creds = data.credentials || [];
+      if (creds.length === 0) { box.innerHTML = '<p style="font-size:11px;color:var(--muted);margin-bottom:8px">No credentials saved yet.</p>'; return; }
+      var html = '';
+      for (var i = 0; i < creds.length; i++) {
+        var c = creds[i];
+        html += '<div class="saved-cred-row"><span class="cred-name">' + escapeHtml(c.platform) + '</span>';
+        html += '<span class="cred-type">' + (c.auth_type === 'cookie' ? 'Cookie' : 'Password') + '</span>';
+        html += '<button class="btn-delete js-delete-cred" data-platform="' + c.platform + '">Remove</button></div>';
+      }
+      box.innerHTML = html;
+    })
+    .catch(function () {});
+}
+
+function saveCredential() {
+  var platform = document.getElementById('credPlatform').value;
+  var activeTab = document.querySelector('.auth-tab.active');
+  var authType = activeTab ? activeTab.getAttribute('data-type') : 'cookie';
+  var statusEl = document.getElementById('credStatus');
+  var data = {};
+
+  if (authType === 'cookie') {
+    data.cookie = document.getElementById('credCookie').value.trim();
+    if (!data.cookie) { showStatus(statusEl, 'Paste your session cookie.', 'error'); return; }
+  } else {
+    data.email = document.getElementById('credEmail').value.trim();
+    data.password = document.getElementById('credPassword').value;
+    if (!data.email || !data.password) { showStatus(statusEl, 'Enter email and password.', 'error'); return; }
+  }
+
+  showStatus(statusEl, 'Saving...', '');
+  fetch('/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+    body: JSON.stringify({ platform: platform, auth_type: authType, data: data })
+  })
+    .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, data: d }; }); })
+    .then(function (result) {
+      if (!result.ok) { showStatus(statusEl, result.data.error || 'Could not save.', 'error'); return; }
+      showStatus(statusEl, result.data.message, 'success');
+      document.getElementById('credCookie').value = '';
+      document.getElementById('credEmail').value = '';
+      document.getElementById('credPassword').value = '';
+      loadCredentials();
+    })
+    .catch(function () { showStatus(statusEl, 'Could not reach server.', 'error'); });
+}
+
+function deleteCredential(platform) {
+  fetch('/credentials/' + platform, { method: 'DELETE', headers: { 'X-API-Key': apiKey } })
+    .then(function () { loadCredentials(); })
+    .catch(function () {});
 }
 
 function addSchedule() {

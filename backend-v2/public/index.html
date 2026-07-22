@@ -37,6 +37,34 @@
     <!-- Main dashboard, shown after key is entered -->
     <div class="hidden" id="mainContent">
 
+      <div class="card" id="credCard">
+        <div class="card-title">Login Credentials</div>
+        <p class="info-text">Your server needs to log into each AI platform on your behalf. Stored encrypted on your server.</p>
+        <div id="savedCreds"></div>
+        <div class="field">
+          <label class="label">Platform</label>
+          <select id="credPlatform" class="input">
+            <option value="claude">Claude.ai</option>
+            <option value="chatgpt">ChatGPT</option>
+            <option value="gemini">Gemini</option>
+            <option value="perplexity">Perplexity</option>
+          </select>
+        </div>
+        <div class="auth-toggle">
+          <button class="auth-tab active" data-type="cookie" type="button">Session Cookie</button>
+          <button class="auth-tab" data-type="password" type="button">Email + Password</button>
+        </div>
+        <div id="cookieForm">
+          <textarea id="credCookie" class="textarea" rows="2" placeholder="Paste session cookie..."></textarea>
+        </div>
+        <div id="passwordForm" class="hidden">
+          <div class="field"><input type="email" id="credEmail" class="input" placeholder="Email"></div>
+          <div class="field"><input type="password" id="credPassword" class="input" placeholder="Password"></div>
+        </div>
+        <button class="btn-primary" id="saveCredBtn" type="button">Save Credentials</button>
+        <div id="credStatus" class="status-msg hidden"></div>
+      </div>
+
       <div class="card">
         <div class="card-title">Schedule a Prompt</div>
         <div class="field">
