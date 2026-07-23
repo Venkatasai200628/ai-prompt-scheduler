@@ -1,38 +1,20 @@
 {
   "manifest_version": 3,
   "name": "AI Prompt Scheduler",
-  "version": "2.0.0",
-  "description": "Schedule prompts to any AI chatbot. Works locally, via phone notification, or 24/7 via cloud — even when your laptop is off.",
-  "permissions": [
-    "alarms", "storage", "tabs", "scripting",
-    "notifications", "identity", "downloads"
-  ],
+  "version": "3.0.0",
+  "description": "Schedule prompts to Claude, ChatGPT, Gemini, and Perplexity. Local mode is free forever. Cloud mode works via your own server 24/7.",
+  "permissions": ["alarms", "storage", "tabs", "scripting", "notifications", "downloads"],
   "host_permissions": [
     "https://claude.ai/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://gemini.google.com/*",
-    "https://www.perplexity.ai/*",
-    "https://YOUR_BACKEND_DOMAIN.com/*"
+    "https://www.perplexity.ai/*"
   ],
-  "background": {
-    "service_worker": "background.js"
-  },
+  "background": { "service_worker": "background.js" },
   "action": {
     "default_popup": "popup.html",
-    "default_icon": {
-      "16":  "icons/icon16.png",
-      "48":  "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
   },
-  "icons": {
-    "16":  "icons/icon16.png",
-    "48":  "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [{
-    "resources": ["auth-callback.html"],
-    "matches":   ["https://YOUR_BACKEND_DOMAIN.com/*"]
-  }]
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
 }

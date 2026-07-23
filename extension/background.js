@@ -1,265 +1,143 @@
-// ─── AI Prompt Scheduler — Background Service Worker ─────────────────────────
-const ALARM_PREFIX       = 'aps-';
-const RETRY_ALARM_PREFIX = 'aps-retry-';
-const INJECT_DELAY       = 4500;
-const RETRY_DELAY_MIN    = 10; // minutes — chrome.alarms works in minutes, not ms
-const MAX_RETRIES        = 6;
+// AI Prompt Scheduler — Background Service Worker
+var ALARM_PREFIX = 'aps-';
+var RETRY_ALARM_PREFIX = 'aps-retry-';
+var INJECT_DELAY = 4500;
+var RETRY_DELAY_MIN = 10;
+var MAX_RETRIES = 6;
 
 chrome.runtime.onStartup.addListener(handleStartup);
 chrome.runtime.onInstalled.addListener(handleStartup);
 
-async function handleStartup() {
-  const { local_schedules: schedules = [] } = await chrome.storage.local.get('local_schedules');
-  const now = Date.now();
-  for (const s of schedules) {
-    if (!['pending', 'waiting_limit'].includes(s.status)) continue;
-    if (s.scheduledTime <= now) {
-      console.log('[APS] Missed schedule, firing now:', s.id);
-      fireSchedule(s.id);
-    } else if (s.status === 'pending') {
-      chrome.alarms.create(ALARM_PREFIX + s.id, { when: s.scheduledTime });
-    }
-    // Note: if status is 'waiting_limit', its retry alarm (aps-retry-<id>) was
-    // already created before — chrome.alarms persist across service worker
-    // restarts and even browser restarts, so we don't need to recreate it here.
-  }
-}
-
-// ── Single alarm listener handles BOTH the original fire time AND retries ─────
-// Using chrome.alarms (not setTimeout) is essential: Chrome kills this service
-// worker after ~30 seconds of inactivity, silently cancelling any setTimeout
-// that hasn't fired yet. chrome.alarms survives that — it's designed exactly
-// for "do something later" in Manifest V3, unlike setTimeout.
-chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name.startsWith(RETRY_ALARM_PREFIX)) {
-    await fireSchedule(alarm.name.replace(RETRY_ALARM_PREFIX, ''));
-  } else if (alarm.name.startsWith(ALARM_PREFIX)) {
-    await fireSchedule(alarm.name.replace(ALARM_PREFIX, ''));
-  }
-});
-
-async function fireSchedule(scheduleId) {
-  const { local_schedules: schedules = [] } = await chrome.storage.local.get('local_schedules');
-  const schedule = schedules.find(s => s.id === scheduleId);
-  if (!schedule) return;
-  if (!['pending', 'waiting_limit'].includes(schedule.status)) return;
-
-  const retryCount = schedule.retryCount || 0;
-  await updateStatus(scheduleId, 'running');
-
-  try {
-    const tab = await chrome.tabs.create({ url: schedule.chatUrl, active: true });
-    await waitForTabLoad(tab.id);
-    await sleep(INJECT_DELAY);
-
-    const limitCheck = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: checkUsageLimit });
-    if (limitCheck?.[0]?.result) {
-      await chrome.tabs.remove(tab.id).catch(() => {});
-
-      if (retryCount < MAX_RETRIES) {
-        await updateStatus(scheduleId, 'waiting_limit', `Limit active — retry ${retryCount + 1}/${MAX_RETRIES}`, retryCount + 1);
-        notify('⏳ Limit Reached', `${schedule.platform} limit active. Retrying in ${RETRY_DELAY_MIN} min.`);
-        // chrome.alarms — survives service worker shutdown, unlike setTimeout
-        chrome.alarms.create(RETRY_ALARM_PREFIX + scheduleId, { delayInMinutes: RETRY_DELAY_MIN });
-      } else {
-        await updateStatus(scheduleId, 'failed', 'Gave up after repeated limit errors.');
-        notify('❌ Still Limited', `${schedule.platform} limit never cleared after ${MAX_RETRIES} tries.`);
+function handleStartup() {
+  chrome.storage.local.get('local_schedules', function (d) {
+    var schedules = d.local_schedules || [];
+    var now = Date.now();
+    schedules.forEach(function (s) {
+      if (['pending', 'waiting_limit'].indexOf(s.status) === -1) return;
+      if (s.scheduledTime <= now) {
+        fireSchedule(s.id);
+      } else if (s.status === 'pending') {
+        chrome.alarms.create(ALARM_PREFIX + s.id, { when: s.scheduledTime });
       }
-      return;
-    }
-
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id }, func: injectAndSendPrompt,
-      args: [schedule.prompt, schedule.platform]
-    });
-
-    await updateStatus(scheduleId, 'sent');
-    notify('✅ Prompt Sent!', `Sent to ${schedule.platform} — capturing response...`);
-
-    const respResult = await chrome.scripting.executeScript({
-      target: { tabId: tab.id }, func: waitAndCaptureResponse,
-      args: [schedule.platform]
-    });
-    const fullResponse = respResult?.[0]?.result || '';
-
-    if (fullResponse) {
-      await saveResponseAndExport(scheduleId, schedule, fullResponse);
-      notify('📄 Response Saved', `Full response exported as a file for ${schedule.platform}.`);
-    }
-
-  } catch (err) {
-    console.error('[APS] Error:', err.message);
-    await updateStatus(scheduleId, 'failed', err.message);
-    notify('❌ Prompt Failed', `${schedule.platform}: ${err.message}`);
-  }
-}
-
-function checkUsageLimit() {
-  const t = document.body.innerText.toLowerCase();
-  return ['usage limit','message limit',"you've reached",'reached your limit','try again later','limit reached','come back later','resets at','daily limit','rate limit','upgrade to continue'].some(p => t.includes(p));
-}
-
-function waitForTabLoad(tabId) {
-  return new Promise((resolve) => {
-    const fb = setTimeout(resolve, 15000);
-    chrome.tabs.onUpdated.addListener(function l(id, info) {
-      if (id !== tabId || info.status !== 'complete') return;
-      chrome.tabs.onUpdated.removeListener(l); clearTimeout(fb); resolve();
     });
   });
 }
 
+chrome.alarms.onAlarm.addListener(function (alarm) {
+  if (alarm.name.indexOf(RETRY_ALARM_PREFIX) === 0) {
+    fireSchedule(alarm.name.replace(RETRY_ALARM_PREFIX, ''));
+  } else if (alarm.name.indexOf(ALARM_PREFIX) === 0) {
+    fireSchedule(alarm.name.replace(ALARM_PREFIX, ''));
+  }
+});
+
+function fireSchedule(scheduleId) {
+  chrome.storage.local.get('local_schedules', function (d) {
+    var schedules = d.local_schedules || [];
+    var schedule = null;
+    for (var i = 0; i < schedules.length; i++) if (schedules[i].id === scheduleId) schedule = schedules[i];
+    if (!schedule) return;
+    if (['pending', 'waiting_limit'].indexOf(schedule.status) === -1) return;
+
+    var retryCount = schedule.retryCount || 0;
+    updateStatus(scheduleId, 'running', null, undefined, function () {
+      chrome.tabs.create({ url: schedule.chatUrl, active: true }, function (tab) {
+        waitForTabLoad(tab.id, function () {
+          setTimeout(function () {
+            chrome.scripting.executeScript({ target: { tabId: tab.id }, func: checkUsageLimit }, function (limitResult) {
+              var limitHit = limitResult && limitResult[0] && limitResult[0].result;
+              if (limitHit) {
+                chrome.tabs.remove(tab.id);
+                if (retryCount < MAX_RETRIES) {
+                  updateStatus(scheduleId, 'waiting_limit', 'Limit active — retry ' + (retryCount + 1) + '/' + MAX_RETRIES, retryCount + 1, function () {
+                    notify('Limit Reached', schedule.platform + ' limit active. Retrying in ' + RETRY_DELAY_MIN + ' min.');
+                    chrome.alarms.create(RETRY_ALARM_PREFIX + scheduleId, { delayInMinutes: RETRY_DELAY_MIN });
+                  });
+                } else {
+                  updateStatus(scheduleId, 'failed', 'Gave up after repeated limit errors.');
+                  notify('Still Limited', schedule.platform + ' limit never cleared.');
+                }
+                return;
+              }
+              chrome.scripting.executeScript({ target: { tabId: tab.id }, func: injectAndSendPrompt, args: [schedule.prompt, schedule.platform] }, function () {
+                updateStatus(scheduleId, 'sent');
+                notify('Prompt Sent!', 'Sent to ' + schedule.platform + '.');
+              });
+            });
+          }, INJECT_DELAY);
+        });
+      });
+    });
+  });
+}
+
+function checkUsageLimit() {
+  var t = document.body.innerText.toLowerCase();
+  var phrases = ['usage limit', 'message limit', "you've reached", 'reached your limit', 'try again later', 'limit reached', 'come back later', 'resets at', 'daily limit', 'rate limit'];
+  return phrases.some(function (p) { return t.indexOf(p) !== -1; });
+}
+
+function waitForTabLoad(tabId, callback) {
+  var fired = false;
+  var fallback = setTimeout(function () { if (!fired) { fired = true; callback(); } }, 15000);
+  function listener(id, info) {
+    if (id !== tabId || info.status !== 'complete') return;
+    chrome.tabs.onUpdated.removeListener(listener);
+    if (!fired) { fired = true; clearTimeout(fallback); callback(); }
+  }
+  chrome.tabs.onUpdated.addListener(listener);
+}
+
 function injectAndSendPrompt(promptText, platform) {
-  const CONFIG = {
-    'Claude.ai':  { inputs:['div.ProseMirror[contenteditable="true"]','div[contenteditable="true"]'], submits:['button[aria-label="Send message"]','button[aria-label="Send Message"]'] },
-    'ChatGPT':    { inputs:['#prompt-textarea','div[contenteditable="true"]'], submits:['button[data-testid="send-button"]','button[aria-label="Send prompt"]'] },
-    'Gemini':     { inputs:['div.ql-editor[contenteditable="true"]','div[contenteditable="true"]'], submits:['button.send-button','button[aria-label="Send message"]'] },
-    'Perplexity': { inputs:['textarea[placeholder]','div[contenteditable="true"]'], submits:['button[aria-label="Submit"]','button[type="submit"]'] }
+  var CONFIG = {
+    'Claude.ai': { inputs: ['div.ProseMirror[contenteditable="true"]', 'div[contenteditable="true"]'], submits: ['button[aria-label="Send message"]'] },
+    'ChatGPT': { inputs: ['#prompt-textarea', 'div[contenteditable="true"]'], submits: ['button[data-testid="send-button"]'] },
+    'Gemini': { inputs: ['div.ql-editor[contenteditable="true"]', 'div[contenteditable="true"]'], submits: ['button.send-button'] },
+    'Perplexity': { inputs: ['textarea[placeholder]', 'div[contenteditable="true"]'], submits: ['button[aria-label="Submit"]'] }
   };
-  const cfg = CONFIG[platform] || CONFIG['Claude.ai'];
-  let attempts = 0;
+  var cfg = CONFIG[platform] || CONFIG['Claude.ai'];
+  var attempts = 0;
   function tryInject() {
     if (++attempts > 15) return;
-    let el = null;
-    for (const sel of cfg.inputs) { try { el = document.querySelector(sel); if (el) break; } catch {} }
+    var el = null;
+    for (var i = 0; i < cfg.inputs.length; i++) { try { el = document.querySelector(cfg.inputs[i]); if (el) break; } catch (e) {} }
     if (!el) { setTimeout(tryInject, 1000); return; }
     el.focus();
     if (el.tagName === 'TEXTAREA') {
-      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      var setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
       setter.call(el, promptText);
       el.dispatchEvent(new Event('input', { bubbles: true }));
     } else {
       el.innerHTML = '';
-      try { document.execCommand('selectAll',false,null); document.execCommand('delete',false,null); document.execCommand('insertText',false,promptText); }
-      catch { el.textContent = promptText; el.dispatchEvent(new InputEvent('input',{bubbles:true,data:promptText})); }
+      try { document.execCommand('selectAll', false, null); document.execCommand('delete', false, null); document.execCommand('insertText', false, promptText); }
+      catch (e) { el.textContent = promptText; el.dispatchEvent(new InputEvent('input', { bubbles: true, data: promptText })); }
     }
-    setTimeout(() => {
-      let sent = false;
-      for (const sel of cfg.submits) { try { const b=document.querySelector(sel); if (b && !b.disabled) { b.click(); sent=true; break; } } catch {} }
-      if (!sent) el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));
+    setTimeout(function () {
+      var sent = false;
+      for (var j = 0; j < cfg.submits.length; j++) {
+        try { var b = document.querySelector(cfg.submits[j]); if (b && !b.disabled) { b.click(); sent = true; break; } } catch (e) {}
+      }
+      if (!sent) el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
     }, 800);
   }
   tryInject();
 }
 
-function waitAndCaptureResponse(platform) {
-  const STOP_BTN = {
-    'Claude.ai':  'button[aria-label="Stop generating"]',
-    'ChatGPT':    '[data-testid="stop-button"]',
-    'Gemini':     '[aria-label="Stop generating"], .loading-indicator',
-    'Perplexity': '[data-testid="stop-button"], .loading'
-  }[platform] || 'button[aria-label="Stop generating"]';
-
-  const MSG_SELECTOR = {
-    'Claude.ai':  '.font-claude-message',
-    'ChatGPT':    '[data-message-author-role="assistant"]',
-    'Gemini':     'model-response, .model-response-text',
-    'Perplexity': '.prose, [data-testid="answer"]'
-  }[platform] || '.font-claude-message';
-
-  return new Promise((resolve) => {
-    const startTime = Date.now();
-    const MAX_WAIT = 120000;
-    function poll() {
-      const stopBtn = document.querySelector(STOP_BTN);
-      const elapsed = Date.now() - startTime;
-      if (!stopBtn && elapsed > 3000) {
-        setTimeout(() => {
-          const msgs = document.querySelectorAll(MSG_SELECTOR);
-          const last = msgs[msgs.length - 1];
-          resolve(last ? last.innerText : '');
-        }, 1000);
-        return;
+function updateStatus(id, status, errorMsg, retryCount, callback) {
+  chrome.storage.local.get('local_schedules', function (d) {
+    var list = d.local_schedules || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        list[i].status = status;
+        list[i].updatedAt = Date.now();
+        if (errorMsg) list[i].errorMsg = errorMsg;
+        if (retryCount !== undefined) list[i].retryCount = retryCount;
       }
-      if (elapsed > MAX_WAIT) {
-        const msgs = document.querySelectorAll(MSG_SELECTOR);
-        const last = msgs[msgs.length - 1];
-        resolve(last ? last.innerText : '(Response timed out while capturing)');
-        return;
-      }
-      setTimeout(poll, 1500);
     }
-    poll();
+    chrome.storage.local.set({ local_schedules: list }, function () { if (callback) callback(); });
   });
 }
 
-function cleanTranscript(rawText) {
-  const NOISE_PATTERNS = [
-    /^load (earlier|later) messages$/i, /^show (more|less)$/i, /^(zip|download)$/i,
-    /^ran a command.*$/i, /^edited( \d+)? files?.*$/i, /^\d{1,2}:\d{2}\s?(am|pm)$/i,
-    /^you said:?\s*$/i, /^claude responded:?\s*$/i
-  ];
-  let lines = rawText.split('\n').map(l => l.trim());
-  lines = lines.filter(l => l && !NOISE_PATTERNS.some(p => p.test(l)));
-  const isPreviewOf = (short, long) => {
-    if (!short || !long || short.length >= long.length) return false;
-    const strip = s => s.toLowerCase().replace(/^(you said:|claude responded:|chatgpt responded:)\s*/i, '');
-    const shortCore = strip(short).slice(0, 35);
-    if (shortCore.length < 8) return false;
-    return strip(long).includes(shortCore);
-  };
-  const cleaned = [];
-  for (let i = 0; i < lines.length; i++) {
-    const cur = lines[i], next = lines[i+1] || '', next2 = lines[i+2] || '';
-    if (isPreviewOf(cur, next) || isPreviewOf(cur, next2)) continue;
-    if (cleaned.length && cleaned[cleaned.length - 1] === cur) continue;
-    cleaned.push(cur);
-  }
-  return cleaned.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+function notify(title, message) {
+  chrome.notifications.create({ type: 'basic', iconUrl: 'icons/icon48.png', title: title, message: message });
 }
-
-// ── Save response + export as file ─────────────────────────────────────────────
-// NOTE: URL.createObjectURL does NOT exist in Manifest V3 service workers
-// (this was the "URL.createObjectURL is not a function" crash). Service workers
-// have no DOM/Blob URL support at all. The correct method here is a base64
-// data: URL built manually — that works fine from a service worker context.
-async function saveResponseAndExport(scheduleId, schedule, fullResponse) {
-  const { local_schedules: list = [] } = await chrome.storage.local.get('local_schedules');
-  const idx = list.findIndex(s => s.id === scheduleId);
-  const cleanedResponse = cleanTranscript(fullResponse);
-  if (idx !== -1) {
-    list[idx].response_text = cleanedResponse.slice(0, 500);
-    await chrome.storage.local.set({ local_schedules: list });
-  }
-
-  const md = [
-    `# AI Prompt Scheduler — Export`, ``,
-    `**Platform:** ${schedule.platform}`,
-    `**Sent at:** ${new Date().toLocaleString()}`, ``,
-    `**You:**`, schedule.prompt, ``, `---`, ``,
-    `**${schedule.platform}:**`, cleanedResponse
-  ].join('\n');
-
-  try {
-    const base64 = base64EncodeUnicode(md);
-    const dataUrl = `data:text/markdown;base64,${base64}`;
-    const filename = `ai-scheduler/${schedule.platform.replace(/[^a-z0-9]/gi,'_')}_${Date.now()}.md`;
-
-    chrome.downloads.download({ url: dataUrl, filename, saveAs: false }, () => {
-      if (chrome.runtime.lastError) console.error('[APS] Download error:', chrome.runtime.lastError.message);
-    });
-  } catch (err) {
-    console.error('[APS] Export encoding error:', err.message);
-  }
-}
-
-// Safely base64-encode text that may contain unicode characters
-function base64EncodeUnicode(str) {
-  const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  bytes.forEach(b => binary += String.fromCharCode(b));
-  return btoa(binary);
-}
-
-async function updateStatus(id, status, errorMsg, retryCount) {
-  const { local_schedules: list = [] } = await chrome.storage.local.get('local_schedules');
-  const idx = list.findIndex(s => s.id === id);
-  if (idx !== -1) {
-    list[idx].status = status; list[idx].updatedAt = Date.now();
-    if (errorMsg) list[idx].errorMsg = errorMsg;
-    if (retryCount !== undefined) list[idx].retryCount = retryCount;
-    await chrome.storage.local.set({ local_schedules: list });
-  }
-}
-function notify(title, message) { chrome.notifications.create({ type:'basic', iconUrl:'icons/icon48.png', title, message }); }
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
