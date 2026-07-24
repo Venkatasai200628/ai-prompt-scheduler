@@ -1,5 +1,10 @@
 async function loginWithCookie(context, data) {
-  await context.addCookies([{ name: '__Secure-next-auth.session-token', value: data.cookie.trim(), domain: 'chatgpt.com', path: '/', secure: true, httpOnly: true, sameSite: 'Lax' }]);
+  const cookies = data.cookie.split(';').map(function (c) {
+    const parts = c.trim().split('=');
+    return { name: parts[0].trim(), value: parts.slice(1).join('=').trim(), domain: 'chatgpt.com', path: '/', secure: true };
+  }).filter(function (c) { return c.name && c.value; });
+  if (cookies.length === 0) throw new Error('ChatGPT: No valid cookies found in what was pasted.');
+  await context.addCookies(cookies);
 }
 async function loginWithPassword(page, data) {
   await page.goto('https://chatgpt.com/auth/login', { waitUntil: 'domcontentloaded' });

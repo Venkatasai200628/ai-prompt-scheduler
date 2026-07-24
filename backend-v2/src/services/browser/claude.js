@@ -1,5 +1,16 @@
 async function loginWithCookie(context, data) {
-  const cookies = [{ name: '__Secure-next-auth.session-token', value: data.cookie.trim(), domain: 'claude.ai', path: '/', secure: true, httpOnly: true, sameSite: 'Lax' }];
+  // Parses the FULL cookie string (however many cookies the site uses) rather
+  // than assuming one exact cookie name. This is more reliable — the specific
+  // session cookie name a site uses can change or vary, but "copy the whole
+  // cookie header" always works regardless of what it's actually called.
+  const cookies = data.cookie.split(';').map(function (c) {
+    const parts = c.trim().split('=');
+    const name = parts[0].trim();
+    const value = parts.slice(1).join('=').trim();
+    return { name: name, value: value, domain: 'claude.ai', path: '/', secure: true };
+  }).filter(function (c) { return c.name && c.value; });
+
+  if (cookies.length === 0) throw new Error('Claude.ai: No valid cookies found in what was pasted.');
   await context.addCookies(cookies);
 }
 async function loginWithPassword(page, data) {

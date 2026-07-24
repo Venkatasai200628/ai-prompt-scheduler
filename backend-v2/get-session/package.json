@@ -1,0 +1,8 @@
+{
+  "name": "get-session",
+  "version": "1.0.0",
+  "description": "Captures your login session for AI Prompt Scheduler",
+  "dependencies": {
+    "playwright": "^1.41.0"
+  }
+}

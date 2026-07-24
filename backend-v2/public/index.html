@@ -55,7 +55,11 @@
           <button class="auth-tab" data-type="password" type="button">Email + Password</button>
         </div>
         <div id="cookieForm">
-          <textarea id="credCookie" class="textarea" rows="2" placeholder="Paste session cookie..."></textarea>
+          <textarea id="credCookie" class="textarea" rows="3" placeholder="Paste the contents of your platform-session.json file here..."></textarea>
+          <div class="hint-note">
+            Recommended: use the <code>get-session</code> tool (see backend-v2/get-session/README.md)
+            to capture your real login session properly — paste the whole JSON file it creates here.
+          </div>
         </div>
         <div id="passwordForm" class="hidden">
           <div class="field"><input type="email" id="credEmail" class="input" placeholder="Email"></div>

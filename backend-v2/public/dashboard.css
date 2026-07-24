@@ -59,3 +59,5 @@ body { font-family:-apple-system,sans-serif; background:var(--bg); color:var(--t
 .saved-cred-row { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--success-bg); border:1px solid var(--border); border-radius:8px; margin-bottom:6px; font-size:12px; }
 .cred-name { font-weight:700; color:var(--success-text); flex:1; }
 .cred-type { font-size:11px; color:var(--muted); }
+.hint-note { font-size:10px; color:var(--muted); margin-top:5px; line-height:1.5; }
+.hint-note code { background:var(--primary-lt); color:var(--primary); padding:1px 4px; border-radius:3px; }
