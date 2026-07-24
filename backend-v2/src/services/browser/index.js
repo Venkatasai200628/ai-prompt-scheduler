@@ -24,6 +24,17 @@ async function sendScheduledPrompt(schedule, creds) {
 
     await page.goto(schedule.chat_url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(3000);
+
+    // Check for a "usage limit reached" banner BEFORE trying to send anything.
+    // If found, throw a specific error the scheduler recognizes, so it can
+    // wait and retry automatically instead of just marking this as failed.
+    const pageText = (await page.locator('body').innerText().catch(() => '')).toLowerCase();
+    const limitPhrases = ['usage limit', 'message limit', "you've reached", 'reached your limit',
+      'try again later', 'limit reached', 'come back later', 'resets at', 'daily limit', 'rate limit'];
+    if (limitPhrases.some(function (p) { return pageText.indexOf(p) !== -1; })) {
+      throw new Error('USAGE_LIMIT_ACTIVE');
+    }
+
     const response = await platform.sendPrompt(page, schedule.prompt);
     return response || '(Response captured — check your chat)';
   } finally {
